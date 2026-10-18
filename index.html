@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Дота-помощник</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="data.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #12161c);
+    --bg2: var(--tg-theme-secondary-bg-color, #1e242d);
+    --text: var(--tg-theme-text-color, #ebeef2);
+    --hint: var(--tg-theme-hint-color, #8c96a5);
+    --accent: var(--tg-theme-button-color, #e6be50);
+    --accent-text: var(--tg-theme-button-text-color, #12161c);
+    --red: #e65a50;
+    --green: #66cc78;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.35 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 0 12px 96px; }
+  button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+
+  .tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: 6px; padding: 10px 0;
+    background: var(--bg); }
+  .tabs button { flex: 1; padding: 10px 4px; border-radius: var(--radius); background: var(--bg2);
+    font-weight: 600; }
+  .tabs button.on { background: var(--accent); color: var(--accent-text); }
+
+  .switch { display: flex; gap: 6px; margin: 4px 0 8px; }
+  .switch button { flex: 1; padding: 9px 4px; border-radius: 10px; background: var(--bg2);
+    border: 2px solid transparent; font-weight: 600; }
+  .switch button.on { border-color: var(--accent); }
+
+  .slots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 8px; }
+  .slot { aspect-ratio: 16 / 9; border-radius: 8px; background: var(--bg2); position: relative;
+    overflow: hidden; border: 2px solid transparent; }
+  .slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .slot.enemy { border-color: var(--red); }
+  .slot.ally { border-color: var(--green); }
+  .slot.me { border-color: var(--accent); }
+  .slot.empty { border: 2px dashed color-mix(in srgb, var(--hint) 50%, transparent); }
+  .slot .x { position: absolute; top: 1px; right: 3px; font-size: 12px; text-shadow: 0 0 3px #000; }
+  .label { font-size: 13px; color: var(--hint); margin: 6px 0 4px; }
+
+  .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .chips button { white-space: nowrap; padding: 7px 12px; border-radius: 999px; background: var(--bg2); }
+  .chips button.on { background: var(--accent); color: var(--accent-text); }
+
+  .search { width: 100%; padding: 11px 14px; border-radius: var(--radius); border: 0; margin: 8px 0;
+    background: var(--bg2); color: var(--text); font: inherit; outline: none; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+  .hero { padding: 0; background: none; text-align: center; min-width: 0; }
+  .hero img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; display: block;
+    background: var(--bg2); }
+  .hero span { display: block; font-size: 11px; margin-top: 3px; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; color: var(--hint); }
+  .hero.used { opacity: .25; }
+  .hint { color: var(--hint); font-size: 13px; margin: 6px 0; }
+
+  .card { background: var(--bg2); border-radius: 16px; padding: 16px; margin: 10px 0; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--hint); }
+  .card .go { margin-top: 12px; width: 100%; padding: 12px; border-radius: var(--radius);
+    background: var(--accent); color: var(--accent-text); font-weight: 700; }
+  .best { float: right; color: var(--accent); font-weight: 700; }
+
+  .q { text-align: center; margin: 10px 0 14px; }
+  .q img { width: 70%; max-width: 280px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; }
+  .q h2 { font-size: 18px; margin: 10px 0 0; }
+  .progress { color: var(--hint); font-size: 13px; text-align: center; }
+  .options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .opt { background: var(--bg2); border-radius: 12px; padding: 8px; border: 2px solid transparent; }
+  .opt img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; display: block; }
+  .opt.item img { aspect-ratio: 88 / 64; }
+  .opt span { display: block; margin-top: 6px; font-size: 13px; }
+  .opt.right { border-color: var(--green); }
+  .opt.wrong { border-color: var(--red); }
+  .explain { margin-top: 12px; color: var(--hint); font-size: 13px; text-align: center; }
+  .next { display: block; width: 100%; margin-top: 14px; padding: 13px; border-radius: var(--radius);
+    background: var(--accent); color: var(--accent-text); font-weight: 700; }
+  .score { font-size: 48px; font-weight: 800; text-align: center; margin: 20px 0 4px; }
+
+  #fallback { position: fixed; left: 12px; right: 12px; bottom: 14px; padding: 14px; border-radius: 14px;
+    background: var(--accent); color: var(--accent-text); font-weight: 700; display: none; }
+  #fallback:disabled { opacity: .4; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<nav class="tabs">
+  <button data-tab="draft" class="on">🎯 Пик</button>
+  <button data-tab="items">🛒 Сборка</button>
+  <button data-tab="train">🎮 Игры</button>
+</nav>
+
+<section id="tab-draft">
+  <div class="switch">
+    <button data-side="e" class="on" id="sw-e">🔴 Враги</button>
+    <button data-side="a" id="sw-a">🟢 Союзники</button>
+  </div>
+  <div class="label">Враги</div>
+  <div class="slots" id="slots-e"></div>
+  <div class="label">Союзники</div>
+  <div class="slots" id="slots-a"></div>
+</section>
+
+<section id="tab-items" class="hidden">
+  <div class="switch">
+    <button data-iside="me" class="on" id="sw-me">🦸 Мой герой</button>
+    <button data-iside="e" id="sw-ie">🔴 Мешают</button>
+  </div>
+  <div class="label">Ты играешь</div>
+  <div class="slots" id="slots-me"></div>
+  <div class="chips" id="positions"></div>
+  <div class="label">Кто мешает</div>
+  <div class="slots" id="slots-ie"></div>
+</section>
+
+<div id="picker">
+  <input class="search" id="search" placeholder="Поиск: пудж, pa, бабка…" autocomplete="off">
+  <div class="chips" id="attrs"></div>
+  <div class="hint" id="pick-hint">Нажми на героя, чтобы добавить. Нажми на выбранного — убрать.</div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<section id="tab-train" class="hidden"></section>
+
+<button id="fallback"></button>
+
+<script>
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTelegram = !!(tg && tg.initData);
+const HEROES = window.DOTA.heroes;
+const BY_ID = Object.fromEntries(HEROES.map(h => [h.id, h]));
+const ATTRS = [["", "Все"], ["str", "💪 Сила"], ["agi", "🏹 Ловкость"], ["int", "🧠 Интеллект"], ["all", "⚖️ Универсал"]];
+const POS_NAMES = {1: "Керри", 2: "Мид", 3: "Оффлейн", 4: "Роумер", 5: "Саппорт"};
+
+const state = {
+  tab: "draft", attr: "", query: "",
+  draft: {side: "e", e: [], a: []},
+  items: {side: "me", hero: null, pos: null, e: []},
+};
+
+const $ = id => document.getElementById(id);
+const norm = s => s.toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9]/g, "");
+const haptic = kind => { try { tg.HapticFeedback.impactOccurred(kind || "light"); } catch (e) {} };
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const pickRandom = (a, n) => shuffle(a.slice()).slice(0, n);
+
+// ---------- выбор героев ----------
+function used() {
+  if (state.tab === "draft") return new Set([...state.draft.e, ...state.draft.a]);
+  return new Set([state.items.hero, ...state.items.e].filter(Boolean));
+}
+
+function matches(h) {
+  if (state.attr && h.attr !== state.attr) return false;
+  const q = norm(state.query);
+  if (!q) return true;
+  return h.aliases.some(a => a.startsWith(q)) || (q.length >= 3 && norm(h.name).includes(q));
+}
+
+function renderGrid() {
+  const taken = used();
+  $("grid").innerHTML = HEROES.filter(matches).map(h =>
+    `<button class="hero ${taken.has(h.id) ? "used" : ""}" data-id="${h.id}">
+       <img loading="lazy" src="${h.img}" alt=""><span>${h.name}</span></button>`).join("")
+    || `<div class="hint">Никого не нашёл 🤔</div>`;
+}
+
+function slotsHtml(ids, size, cls) {
+  let html = "";
+  for (let i = 0; i < size; i++) {
+    const h = BY_ID[ids[i]];
+    html += h ? `<button class="slot ${cls}" data-remove="${h.id}"><img src="${h.img}" alt=""><span class="x">✕</span></button>`
+              : `<div class="slot empty"></div>`;
+  }
+  return html;
+}
+
+function renderSlots() {
+  const d = state.draft, it = state.items;
+  $("slots-e").innerHTML = slotsHtml(d.e, 5, "enemy");
+  $("slots-a").innerHTML = slotsHtml(d.a, 4, "ally");
+  $("sw-e").textContent = `🔴 Враги ${d.e.length}/5`;
+  $("sw-a").textContent = `🟢 Союзники ${d.a.length}/4`;
+  $("sw-e").classList.toggle("on", d.side === "e");
+  $("sw-a").classList.toggle("on", d.side === "a");
+
+  $("slots-me").innerHTML = slotsHtml(it.hero ? [it.hero] : [], 1, "me") + "<div></div>".repeat(4);
+  $("slots-ie").innerHTML = slotsHtml(it.e, 5, "enemy");
+  $("sw-me").classList.toggle("on", it.side === "me");
+  $("sw-ie").classList.toggle("on", it.side === "e");
+  $("sw-ie").textContent = `🔴 Мешают ${it.e.length}/5`;
+  const hero = BY_ID[it.hero];
+  $("positions").innerHTML = hero && hero.pos.length > 1
+    ? hero.pos.slice().sort().map(p => `<button data-pos="${p}" class="${p === it.pos ? "on" : ""}">Поз. ${p} · ${POS_NAMES[p]}</button>`).join("")
+    : "";
+  updateMainButton();
+}
+
+function addHero(id) {
+  const taken = used();
+  if (taken.has(id)) { removeHero(id); return; }
+  if (state.tab === "draft") {
+    const d = state.draft, list = d[d.side], max = d.side === "e" ? 5 : 4;
+    if (list.length >= max) { flash(`Уже ${max} — убери кого-нибудь`); return; }
+    list.push(id);
+    if (d.side === "e" && d.e.length === 5 && d.a.length < 4) d.side = "a";  // враги собраны — дальше союзники
+  } else {
+    const it = state.items;
+    if (it.side === "me") {
+      it.hero = id; it.pos = BY_ID[id].pos[0]; it.side = "e";  // героя выбрал — дальше враги
+    } else {
+      if (it.e.length >= 5) { flash("Уже 5 — убери кого-нибудь"); return; }
+      it.e.push(id);
+    }
+  }
+  haptic();
+  state.query = ""; $("search").value = "";
+  renderSlots(); renderGrid();
+}
+
+function removeHero(id) {
+  if (state.tab === "draft") {
+    state.draft.e = state.draft.e.filter(x => x !== id);
+    state.draft.a = state.draft.a.filter(x => x !== id);
+  } else {
+    if (state.items.hero === id) { state.items.hero = null; state.items.pos = null; state.items.side = "me"; }
+    state.items.e = state.items.e.filter(x => x !== id);
+  }
+  haptic("soft");
+  renderSlots(); renderGrid();
+}
+
+function flash(text) {
+  if (inTelegram) tg.showAlert(text); else alert(text);
+}
+
+// ---------- кнопка «Анализировать» ----------
+function mainAction() {
+  if (state.tab === "draft") {
+    const d = state.draft;
+    return {text: "💡 Подобрать героя", enabled: d.e.length + d.a.length > 0,
+            payload: {t: "d", e: d.e, a: d.a}};
+  }
+  if (state.tab === "items") {
+    const it = state.items;
+    return {text: "🛒 Подобрать предметы", enabled: !!it.hero, payload: {t: "i", h: it.hero, p: it.pos, e: it.e}};
+  }
+  return null;
+}
+
+function updateMainButton() {
+  const action = mainAction();
+  if (inTelegram) {
+    if (!action) { tg.MainButton.hide(); return; }
+    tg.MainButton.setText(action.text);
+    action.enabled ? tg.MainButton.enable() : tg.MainButton.disable();
+    tg.MainButton.color = action.enabled ? tg.themeParams.button_color || "#e6be50" : "#55606e";
+    tg.MainButton.show();
+  } else {
+    const b = $("fallback");
+    b.style.display = action ? "block" : "none";
+    if (action) { b.textContent = action.text; b.disabled = !action.enabled; }
+  }
+}
+
+function send() {
+  const action = mainAction();
+  if (!action || !action.enabled) return;
+  const data = JSON.stringify(action.payload);
+  if (inTelegram) tg.sendData(data);  // бот получит данные и пришлёт картинку, приложение закроется
+  else alert("В Telegram отправится боту:\n" + data);
+}
+
+// ---------- тренировка ----------
+const GAMES = {
+  counter: {
+    title: "🧠 Найди контрпик",
+    about: "Показываю героя — выбери, кто его контрит. 10 вопросов по таблице контрпиков.",
+    make() {
+      const hero = pickRandom(HEROES.filter(h => h.counters.length), 1)[0];
+      const right = BY_ID[pickRandom(hero.counters, 1)[0]];
+      const wrong = pickRandom(HEROES.filter(h => h.id !== hero.id && !hero.counters.includes(h.id)), 3);
+      return {
+        img: hero.img, question: `Кто контрит ${hero.name}?`, kind: "hero",
+        options: shuffle([right, ...wrong].map(h => ({img: h.img, name: h.name, right: h === right}))),
+        explain: "Все контрпики: " + hero.counters.map(id => BY_ID[id].name).join(", "),
+      };
+    },
+  },
+  items: {
+    title: "🛒 Что собрать против",
+    about: "Показываю героя — выбери предмет, который против него особенно хорош.",
+    make() {
+      const hero = pickRandom(HEROES.filter(h => h.items.length), 1)[0];
+      const right = pickRandom(hero.items, 1)[0];
+      const mine = new Set(hero.items.map(i => i.name));
+      const pool = {};
+      HEROES.forEach(h => h.items.forEach(i => { if (!mine.has(i.name)) pool[i.name] = i; }));
+      const wrong = pickRandom(Object.values(pool), 3);
+      return {
+        img: hero.img, question: `Что собрать против ${hero.name}?`, kind: "item",
+        options: shuffle([right, ...wrong].map(i => ({img: i.img, name: i.name, right: i === right}))),
+        explain: "Против него: " + hero.items.map(i => i.name).join(", "),
+      };
+    },
+  },
+};
+const ROUNDS = 10;
+let game = null;
+
+function storageGet(key, cb) {
+  try {
+    if (inTelegram && tg.CloudStorage) { tg.CloudStorage.getItem(key, (err, v) => cb(Number(v) || 0)); return; }
+  } catch (e) {}
+  try { cb(Number(localStorage.getItem(key)) || 0); } catch (e) { cb(0); }
+}
+function storageSet(key, value) {
+  try { if (inTelegram && tg.CloudStorage) tg.CloudStorage.setItem(key, String(value)); } catch (e) {}
+  try { localStorage.setItem(key, String(value)); } catch (e) {}
+}
+
+function renderTrainMenu() {
+  const box = $("tab-train");
+  box.innerHTML = Object.entries(GAMES).map(([key, g]) =>
+    `<div class="card"><span class="best" id="best-${key}"></span><h3>${g.title}</h3><p>${g.about}</p>
+       <button class="go" data-game="${key}">Играть</button></div>`).join("");
+  Object.keys(GAMES).forEach(key => storageGet("best_" + key, v => {
+    const el = $("best-" + key); if (el && v) el.textContent = `рекорд ${v}/${ROUNDS}`;
+  }));
+}
+
+function startGame(key) {
+  game = {key, round: 0, score: 0, current: null, answered: false};
+  nextRound();
+}
+
+function nextRound() {
+  if (game.round >= ROUNDS) { finishGame(); return; }
+  game.round += 1; game.answered = false;
+  game.current = GAMES[game.key].make();
+  const q = game.current;
+  $("tab-train").innerHTML = `
+    <div class="progress">Вопрос ${game.round} из ${ROUNDS} · верно ${game.score}</div>
+    <div class="q"><img src="${q.img}" alt=""><h2>${q.question}</h2></div>
+    <div class="options">${q.options.map((o, i) =>
+      `<button class="opt ${q.kind}" data-opt="${i}"><img src="${o.img}" alt=""><span>${o.name}</span></button>`).join("")}</div>
+    <div id="after"></div>`;
+}
+
+function answer(i) {
+  if (game.answered) return;
+  game.answered = true;
+  const q = game.current, chosen = q.options[i];
+  document.querySelectorAll(".opt").forEach((el, j) => {
+    if (q.options[j].right) el.classList.add("right");
+    else if (j === i) el.classList.add("wrong");
+  });
+  if (chosen.right) { game.score += 1; try { tg.HapticFeedback.notificationOccurred("success"); } catch (e) {} }
+  else { try { tg.HapticFeedback.notificationOccurred("error"); } catch (e) {} }
+  $("after").innerHTML = `<div class="explain">${chosen.right ? "✅ Верно!" : "❌ Мимо."} ${q.explain}</div>
+    <button class="next" id="next">${game.round >= ROUNDS ? "Итог" : "Дальше"}</button>`;
+}
+
+function finishGame() {
+  const key = game.key, score = game.score;
+  storageGet("best_" + key, best => {
+    if (score > best) storageSet("best_" + key, score);
+    const verdict = score >= 9 ? "Ты машина драфта 🧠" : score >= 6 ? "Неплохо, почти про 💪" : "Есть куда расти — попробуй ещё 🙂";
+    $("tab-train").innerHTML = `
+      <div class="score">${score}/${ROUNDS}</div>
+      <div class="progress">${verdict}${score > best ? " · новый рекорд!" : best ? ` · рекорд ${best}/${ROUNDS}` : ""}</div>
+      <button class="next" data-game="${key}">Ещё раз</button>
+      <button class="next" id="to-menu" style="background:var(--bg2);color:var(--text)">К играм</button>`;
+  });
+}
+
+// ---------- вкладки и события ----------
+function setTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  $("tab-draft").classList.toggle("hidden", tab !== "draft");
+  $("tab-items").classList.toggle("hidden", tab !== "items");
+  $("tab-train").classList.toggle("hidden", tab !== "train");
+  $("picker").classList.toggle("hidden", tab === "train");
+  if (tab === "train") renderTrainMenu(); else { renderSlots(); renderGrid(); }
+  updateMainButton();
+  window.scrollTo(0, 0);
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.tab) setTab(t.dataset.tab);
+  else if (t.dataset.side) { state.draft.side = t.dataset.side; renderSlots(); }
+  else if (t.dataset.iside) { state.items.side = t.dataset.iside; renderSlots(); }
+  else if (t.dataset.remove) removeHero(Number(t.dataset.remove));
+  else if (t.dataset.id) addHero(Number(t.dataset.id));
+  else if (t.dataset.attr !== undefined) { state.attr = t.dataset.attr; renderAttrs(); renderGrid(); }
+  else if (t.dataset.pos) { state.items.pos = Number(t.dataset.pos); renderSlots(); }
+  else if (t.dataset.game) startGame(t.dataset.game);
+  else if (t.dataset.opt !== undefined) answer(Number(t.dataset.opt));
+  else if (t.id === "next") nextRound();
+  else if (t.id === "to-menu") renderTrainMenu();
+  else if (t.id === "fallback") send();
+});
+
+function renderAttrs() {
+  $("attrs").innerHTML = ATTRS.map(([k, n]) => `<button data-attr="${k}" class="${state.attr === k ? "on" : ""}">${n}</button>`).join("");
+}
+
+$("search").addEventListener("input", e => { state.query = e.target.value; renderGrid(); });
+
+if (inTelegram) {
+  tg.ready();
+  tg.expand();
+  tg.MainButton.onClick(send);
+}
+renderAttrs();
+setTab("draft");
+</script>
+</body>
+</html>
